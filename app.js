@@ -16,6 +16,8 @@ let dailyChart;
 let cloudClient = null;
 let cloudSession = null;
 let cloudSyncTimer = null;
+let cloudPollTimer = null;
+const CLOUD_POLL_INTERVAL_MS = 5000;
 let isApplyingCloud = false;
 let deferredInstallPrompt = null;
 
@@ -628,10 +630,26 @@ async function initCloud() {
   cloudClient.auth.onAuthStateChange((_event, session) => {
     cloudSession = session;
     updateCloudUI();
-    if (session) setTimeout(() => reconcileCloud(), 0);
+    if (session) {
+      startCloudPolling();
+      setTimeout(() => reconcileCloud(), 0);
+    } else {
+      stopCloudPolling();
+    }
   });
 
-  if (cloudSession) await reconcileCloud();
+  if (cloudSession) {
+    await reconcileCloud();
+    startCloudPolling();
+  }
+
+  window.addEventListener("focus", () => {
+    if (cloudSession?.user) checkCloudForUpdates();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && cloudSession?.user) checkCloudForUpdates();
+  });
 }
 
 function updateCloudUI() {
@@ -675,6 +693,7 @@ async function cloudSignIn() {
   updateCloudUI();
   setCloudMessage("ログインしました。データを同期します。", false);
   await reconcileCloud();
+  startCloudPolling();
 }
 
 async function cloudSignUp() {
@@ -703,8 +722,44 @@ async function cloudSignOut() {
   if (!cloudClient) return;
   await cloudClient.auth.signOut();
   cloudSession = null;
+  stopCloudPolling();
   updateCloudUI();
   setCloudMessage("ログアウトしました。端末内のデータは残っています。", false);
+}
+
+
+function startCloudPolling() {
+  stopCloudPolling();
+  if (!cloudClient || !cloudSession?.user) return;
+  cloudPollTimer = setInterval(() => {
+    if (!document.hidden) checkCloudForUpdates();
+  }, CLOUD_POLL_INTERVAL_MS);
+}
+
+function stopCloudPolling() {
+  if (cloudPollTimer) {
+    clearInterval(cloudPollTimer);
+    cloudPollTimer = null;
+  }
+}
+
+async function checkCloudForUpdates() {
+  if (!cloudClient || !cloudSession?.user || isApplyingCloud) return;
+  try {
+    const remote = await fetchCloudRow();
+    if (!remote) return;
+
+    const remoteTime = new Date(remote.updated_at).getTime();
+    const localTime = Number(localStorage.getItem(LOCAL_UPDATED_KEY) || 0);
+
+    if (remoteTime > localTime) {
+      applyCloudPayload(remote.payload, remote.updated_at);
+      setCloudStatus("cloud", "同期済み");
+      setCloudMessage("別端末の変更を自動反映しました。", false);
+    }
+  } catch (error) {
+    console.warn("Cloud polling failed:", error);
+  }
 }
 
 function scheduleCloudSync() {
