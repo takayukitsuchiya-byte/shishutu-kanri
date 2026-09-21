@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Daily Spend" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Daily Spend</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="top-left">
+      <div class="month-control">
+        <label for="monthPicker">表示月</label>
+        <input type="month" id="monthPicker" class="month-picker" />
+      </div>
+      <div>
+        <p class="eyebrow">PERSONAL EXPENSE TRACKER</p>
+        <h1>Daily Spend</h1>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="cloudStatus" class="cloud-status local">端末保存</span>
+      <button id="themeToggle" class="ghost-btn" aria-label="テーマ切替">☾</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <nav class="tab-nav" aria-label="画面切替">
+      <button class="tab-button active" data-tab="expenses" aria-selected="true">支出管理</button>
+      <button class="tab-button" data-tab="monthly-budget" aria-selected="false">月予算</button>
+      <button class="tab-button" data-tab="category-budget" aria-selected="false">カテゴリ別予算</button>
+      <button class="tab-button" data-tab="sync" aria-selected="false">同期設定</button>
+    </nav>
+
+    <div id="tab-expenses" class="tab-panel active">
+    <section class="summary-grid">
+      <article class="summary-card accent">
+        <span>今月の支出</span>
+        <strong id="monthTotal">¥0</strong>
+        <small id="monthLabel"></small>
+      </article>
+      <article class="summary-card">
+        <span>今日の支出</span>
+        <strong id="todayTotal">¥0</strong>
+        <small id="todayLabel"></small>
+      </article>
+      <article class="summary-card">
+        <span>今月の件数</span>
+        <strong id="monthCount">0件</strong>
+        <small>登録済み</small>
+      </article>
+      <article class="summary-card">
+        <span>1日平均</span>
+        <strong id="dailyAverage">¥0</strong>
+        <small>今月</small>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title-row">
+        <div>
+          <p class="eyebrow">ADD EXPENSE</p>
+          <h2>支出を登録</h2>
+        </div>
+      </div>
+
+      <form id="expenseForm" class="expense-form">
+        <label>
+          日付
+          <input type="date" id="date" required />
+        </label>
+
+        <label>
+          金額
+          <div class="money-input">
+            <span>¥</span>
+            <input type="number" id="amount" min="1" step="1" placeholder="1200" required />
+          </div>
+        </label>
+
+        <label>
+          カテゴリ
+          <select id="category" required></select>
+        </label>
+
+        <label>
+          店名・用途
+          <input type="text" id="merchant" maxlength="40" placeholder="例：コンビニ、ランチ" />
+        </label>
+
+        <label class="wide">
+          メモ
+          <input type="text" id="memo" maxlength="80" placeholder="任意" />
+        </label>
+
+        <button class="primary-btn" type="submit">登録する</button>
+      </form>
+    </section>
+
+    <section class="content-grid">
+      <article class="panel">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">MONTHLY VIEW</p>
+            <h2>カテゴリ別支出</h2>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">TREND</p>
+            <h2>日別支出と月累計</h2>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="dailyChart"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title-row stacked-mobile">
+        <div>
+          <p class="eyebrow">HISTORY</p>
+          <h2>支出履歴</h2>
+        </div>
+        <div class="actions">
+          <button id="exportCsv" class="ghost-btn">CSV出力</button>
+          <button id="clearAll" class="danger-btn">全データ削除</button>
+        </div>
+      </div>
+
+      <div class="filters">
+        <input type="search" id="searchInput" placeholder="店名・用途・メモで検索" />
+        <select id="filterCategory">
+          <option value="">すべてのカテゴリ</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>日付</th>
+              <th>カテゴリ</th>
+              <th>店名・用途</th>
+              <th>メモ</th>
+              <th class="right">金額</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+        <p id="emptyState" class="empty-state">まだ支出が登録されていません。</p>
+      </div>
+    </section>
+
+    <section class="panel settings-panel">
+      <div>
+        <p class="eyebrow">CATEGORY</p>
+        <h2>カテゴリ設定</h2>
+      </div>
+      <div class="category-add">
+        <input id="newCategory" type="text" maxlength="20" placeholder="例：クラリネット" />
+        <button id="addCategory" class="ghost-btn">追加</button>
+      </div>
+      <div id="categoryChips" class="chips"></div>
+    </section>
+    </div>
+
+    <div id="tab-monthly-budget" class="tab-panel">
+    <section class="panel budget-panel">
+      <div class="panel-title-row budget-header">
+        <div>
+          <p class="eyebrow">BUDGET</p>
+          <h2>予算管理</h2>
+        </div>
+        <div class="budget-setter">
+          <label for="budgetInput">月予算</label>
+          <div class="money-input compact">
+            <span>¥</span>
+            <input type="number" id="budgetInput" min="0" step="1000" placeholder="100000" />
+          </div>
+          <button id="saveBudget" class="ghost-btn">保存</button>
+        </div>
+      </div>
+
+      <div class="budget-stats">
+        <div>
+          <span>予算</span>
+          <strong id="budgetAmount">未設定</strong>
+        </div>
+        <div>
+          <span>残額</span>
+          <strong id="budgetRemaining">—</strong>
+        </div>
+        <div>
+          <span>消化率</span>
+          <strong id="budgetRate">—</strong>
+        </div>
+      </div>
+
+      <div class="budget-progress" aria-label="予算消化率">
+        <div id="budgetProgressBar"></div>
+      </div>
+      <p id="budgetMessage" class="budget-message">この月の予算は未設定です。</p>
+    </section>
+
+    </div>
+
+    <div id="tab-category-budget" class="tab-panel">
+    <section class="panel category-budget-panel">
+      <div class="panel-title-row stacked-mobile">
+        <div>
+          <p class="eyebrow">CATEGORY BUDGET</p>
+          <h2>カテゴリ別予算</h2>
+        </div>
+        <div class="category-budget-actions">
+          <span id="categoryBudgetTotal" class="category-budget-total">予算合計 ¥0</span>
+          <button id="saveCategoryBudgets" class="ghost-btn">まとめて保存</button>
+        </div>
+      </div>
+      <p class="category-budget-note">表示中の月について、カテゴリごとに予算を設定できます。0円または空欄は未設定として扱います。</p>
+      <div id="categoryBudgetList" class="category-budget-list"></div>
+    </section>
+
+    </div>
+
+    <div id="tab-sync" class="tab-panel">
+      <section class="panel sync-panel">
+        <div class="panel-title-row stacked-mobile">
+          <div>
+            <p class="eyebrow">APP & CLOUD</p>
+            <h2>アプリ・クラウド同期</h2>
+          </div>
+          <button id="installApp" class="primary-btn" hidden>ホーム画面に追加</button>
+        </div>
+
+        <div class="sync-grid">
+          <div class="sync-card">
+            <h3>スマホアプリとして使う</h3>
+            <p id="installHelp">HTTPSで公開すると、対応ブラウザからホーム画面へ追加できます。</p>
+            <div class="sync-meta"><span>状態</span><strong id="pwaStatus">確認中</strong></div>
+          </div>
+
+          <div class="sync-card">
+            <h3>クラウド保存</h3>
+            <p>Supabaseにサインインすると、支出・カテゴリ・予算を複数端末で同期します。</p>
+            <div id="cloudAuthForm" class="cloud-auth-form">
+              <label>メールアドレス<input type="email" id="cloudEmail" autocomplete="email" placeholder="you@example.com" /></label>
+              <label>パスワード<input type="password" id="cloudPassword" autocomplete="current-password" minlength="6" placeholder="6文字以上" /></label>
+              <div class="actions">
+                <button id="cloudSignIn" class="primary-btn" type="button">ログイン</button>
+                <button id="cloudSignUp" class="ghost-btn" type="button">新規登録</button>
+              </div>
+            </div>
+            <div id="cloudSignedIn" class="cloud-signed-in" hidden>
+              <div class="sync-meta"><span>ログイン中</span><strong id="cloudUser">—</strong></div>
+              <div class="actions">
+                <button id="cloudSyncNow" class="primary-btn" type="button">今すぐ同期</button>
+                <button id="cloudDownload" class="ghost-btn" type="button">クラウドから復元</button>
+                <button id="cloudSignOut" class="danger-btn" type="button">ログアウト</button>
+              </div>
+            </div>
+            <p id="cloudMessage" class="budget-message">Supabase未設定の場合も、端末内保存でそのまま利用できます。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span id="footerStorageText">データはこのブラウザ内に保存されます。</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
